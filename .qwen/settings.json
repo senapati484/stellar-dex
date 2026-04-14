@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npx *)",
+      "Bash(cargo check)",
+      "Bash(cargo test)",
+      "Bash(chmod *)",
+      "Bash(node *)",
+      "Bash(grep *)"
+    ]
+  },
+  "$version": 3
+}

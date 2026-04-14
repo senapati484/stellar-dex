@@ -1,26 +1,72 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fraunces:opsz,wght@9..72,300;9..72,400;9..72,500;9..72,600&family=JetBrains+Mono:wght@400;500&display=swap');
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #F3EFEC;
+  overflow-x: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D4D0CA;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #B4B1AB;
+}
+
+@layer utilities {
+  .claude-card {
+    @apply bg-surface border border-borderInner rounded-xl shadow-sm transition-all duration-200;
+  }
+
+  .claude-card:hover {
+    @apply border-borderOuter shadow-md;
+  }
+
+  .claude-button {
+    @apply inline-flex items-center justify-center font-medium transition-all duration-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .claude-button-primary {
+    @apply bg-primary text-white hover:bg-textMain border border-transparent shadow-sm;
+  }
+
+  .claude-button-secondary {
+    @apply bg-surface text-textMain border border-borderOuter hover:bg-[#F0EEEB] shadow-sm;
+  }
+
+  .claude-input {
+    @apply w-full bg-surface border border-borderInner rounded-lg px-4 py-2 text-textMain placeholder-textMuted/60 transition-all duration-200 focus:outline-none focus:border-borderOuter focus:shadow-[0_0_0_2px_rgba(201,100,66,0.1)];
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.4s ease-out forwards;
+  }
+
+  .stagger-1 { animation-delay: 0.1s; opacity: 0; }
+  .stagger-2 { animation-delay: 0.2s; opacity: 0; }
+  .stagger-3 { animation-delay: 0.3s; opacity: 0; }
+  .stagger-4 { animation-delay: 0.4s; opacity: 0; }
+  .stagger-5 { animation-delay: 0.5s; opacity: 0; }
+
+  .price-flash {
+    animation: price-flash 0.6s ease-out;
+  }
+
+  .mobile-safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 16px);
+  }
 }
