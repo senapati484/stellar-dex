@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { FaTint } from 'react-icons/fa';
 import {
   createDexClient,
@@ -43,7 +43,7 @@ export const PoolPanel: React.FC<PoolPanelProps> = ({ publicKey, onSuccess }) =>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const dexClient = createDexClient((p) => setProgress(p));
+  const dexClient = useMemo(() => createDexClient((p) => setProgress(p)), []);
 
   // Load pool info and LP balance on mount
   useEffect(() => {

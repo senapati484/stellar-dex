@@ -163,26 +163,30 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ refreshTrigger }) =>
       const sortedEvents = deduplicatedEvents.sort((a, b) => b.timestamp - a.timestamp);
 
       // Mark new events
-      const existingIds = new Set(events.map(e => e.txHash));
-      const newIds = new Set(
-        sortedEvents
-          .filter(e => !existingIds.has(e.txHash))
-          .map(e => e.txHash)
-      );
+      setEvents(prevEvents => {
+        const existingIds = new Set(prevEvents.map(e => e.txHash));
+        const newIds = new Set(
+          sortedEvents
+            .filter(e => !existingIds.has(e.txHash))
+            .map(e => e.txHash)
+        );
 
-      setEvents(sortedEvents);
-      setNewEventIds(newIds);
+        setNewEventIds(newIds);
+        
+        // Clear new event IDs after 2s
+        setTimeout(() => {
+          setNewEventIds(new Set());
+        }, 2000);
+
+        return sortedEvents;
+      });
+
       setLastPoll(new Date());
       setPollCount(prev => prev + 1);
-
-      // Clear new event IDs after 2s
-      setTimeout(() => {
-        setNewEventIds(new Set());
-      }, 2000);
     } catch (err) {
       console.error('Failed to poll events:', err);
     }
-  }, [events, parseTransactionToEvent]);
+  }, [parseTransactionToEvent]);
 
   // Adaptive polling based on visibility
   useEffect(() => {
@@ -192,7 +196,8 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ refreshTrigger }) =>
       }
 
       const isVisible = document.visibilityState === 'visible';
-      const interval = isVisible ? 3000 : 12000;
+      // Increased from 3s to 15s visible, 12s to 30s hidden to reduce API calls
+      const interval = isVisible ? 15000 : 30000;
 
       pollingIntervalRef.current = setInterval(() => {
         pollEvents();
@@ -204,6 +209,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ refreshTrigger }) =>
         clearInterval(countdownIntervalRef.current);
       }
 
+      // Only update countdown UI every second
       countdownIntervalRef.current = setInterval(() => {
         setTimeUntilNextPoll(prev => Math.max(0, prev - 1));
       }, 1000);

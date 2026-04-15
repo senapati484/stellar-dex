@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { FaHome, FaExchangeAlt, FaTint, FaBell } from 'react-icons/fa';
 import { stellar, WalletNotFoundError, WalletRejectedError } from '../lib/stellar-helper';
@@ -13,7 +13,7 @@ interface NavbarProps {
   onDisconnect: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({
+const NavbarComponent: React.FC<NavbarProps> = ({
   publicKey,
   isConnected,
   onConnect,
@@ -23,7 +23,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const router = useRouter();
   const [error, setError] = useState<{ type: 'warning' | 'info'; message: string } | null>(null);
 
-  const handleConnect = async () => {
+  const handleConnect = useCallback(async () => {
     try {
       setError(null);
       const address = await stellar.connectWallet();
@@ -37,12 +37,12 @@ export const Navbar: React.FC<NavbarProps> = ({
         setError({ type: 'warning', message: 'Failed to connect wallet' });
       }
     }
-  };
+  }, [onConnect]);
 
-  const handleDisconnect = () => {
+  const handleDisconnect = useCallback(() => {
     stellar.disconnect();
     onDisconnect();
-  };
+  }, [onDisconnect]);
 
   const navLinks = [
     { href: '/', label: 'Swap', mobileLabel: 'Swap', icon: FaExchangeAlt },
@@ -214,3 +214,5 @@ export const Navbar: React.FC<NavbarProps> = ({
     </>
   );
 };
+
+export const Navbar = React.memo(NavbarComponent);

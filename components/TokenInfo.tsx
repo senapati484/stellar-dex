@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createDexClient } from '../lib/contract-client';
 import { stellar } from '../lib/stellar-helper';
 import { StatCard, Card } from './ui';
@@ -25,7 +25,7 @@ export const TokenInfo: React.FC<TokenInfoProps> = ({ publicKey }) => {
   const [xlmBalance, setXlmBalance] = useState('0');
   const [loading, setLoading] = useState(true);
 
-  const dexClient = createDexClient();
+  const dexClient = useMemo(() => createDexClient(), []);
 
   useEffect(() => {
     const loadData = async () => {
