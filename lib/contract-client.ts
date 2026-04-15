@@ -1,4 +1,15 @@
-import { SorobanRpc, xdr, TransactionBuilder, Networks, Address, Contract, ScInt, ScVal } from '@stellar/stellar-sdk';
+import {
+  rpc,
+  xdr,
+  TransactionBuilder,
+  Networks,
+  Address,
+  Contract,
+  Account,
+  BASE_FEE,
+  nativeToScVal,
+  scValToNative,
+} from '@stellar/stellar-sdk';
 
 const TOKEN_ID = process.env.NEXT_PUBLIC_TOKEN_CONTRACT_ID!;
 const POOL_ID = process.env.NEXT_PUBLIC_POOL_CONTRACT_ID!;
@@ -36,23 +47,25 @@ export class SlippageExceededError extends Error {
 }
 
 class DexContractClient {
-  private server: SorobanRpc.Server;
+  private server: rpc.Server;
   private onProgress?: (p: TxProgress) => void;
   private poolInfoCache: { data: any; timestamp: number } | null = null;
   private readonly CACHE_TTL = 10000; // 10 seconds
 
   constructor(onProgress?: (p: TxProgress) => void) {
-    this.server = new SorobanRpc.Server('https://soroban-testnet.stellar.org', {
+    this.server = new rpc.Server('https://soroban-testnet.stellar.org', {
       allowHttp: true,
     });
     this.onProgress = onProgress;
   }
 
-  private async submitTx(xdr: string): Promise<string> {
+  private async submitTx(tx: string): Promise<string> {
     this.onProgress?.({ stage: 'submitting', message: 'Broadcasting to network…' });
 
     try {
-      const txResult = await this.server.sendTransaction(xdr);
+      const txResult = await this.server.sendTransaction(
+        TransactionBuilder.fromXDR(tx, Networks.TESTNET)
+      );
       const txHash = txResult.hash;
 
       this.onProgress?.({ stage: 'confirming', message: 'Confirming on-chain…' });
@@ -63,13 +76,13 @@ class DexContractClient {
         await new Promise(resolve => setTimeout(resolve, 2000));
         const txStatus = await this.server.getTransaction(txHash);
 
-        if (txStatus.status === 'success') {
+        if (txStatus.status === 'SUCCESS') {
           this.onProgress?.({ stage: 'success', message: 'Confirmed!', hash: txHash });
           return txHash;
         }
 
-        if (txStatus.status === 'error') {
-          throw new ContractError(txStatus.resultXdr || 'Transaction failed');
+        if (txStatus.status === 'FAILED') {
+          throw new ContractError('Transaction failed');
         }
       }
 
@@ -85,54 +98,64 @@ class DexContractClient {
 
   async getTokenInfo(): Promise<{ name: string; symbol: string; decimals: number; totalSupply: number }> {
     const contract = new Contract(TOKEN_ID);
-    const method = contract.call('name', 'symbol', 'decimals', 'total_supply');
+    const scValName = nativeToScVal('name', { type: 'string' });
+    const scValSymbol = nativeToScVal('symbol', { type: 'string' });
+    const scValDecimals = nativeToScVal('decimals', { type: 'string' });
+    const scValTotalSupply = nativeToScVal('total_supply', { type: 'string' });
 
-    const result = await this.server.simulateTransaction(
-      new TransactionBuilder(new Account('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWH', '0'), {
-        fee: 100,
-        networkPassphrase: Networks.TESTNET,
-      })
-        .addOperation(method)
-        .build()
-    );
+    const fakeAccount = new Account('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWH', '0');
+    const tx = new TransactionBuilder(fakeAccount, {
+      fee: BASE_FEE,
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(contract.call('name', scValName, scValSymbol, scValDecimals, scValTotalSupply))
+      .setTimeout(30)
+      .build();
 
-    if (result.status !== 'success') {
+    const result = await this.server.simulateTransaction(tx);
+
+    if ('error' in result) {
       throw new ContractError('Failed to get token info');
     }
 
-    const xdrResult = result.result?.toXDR('base64');
-    const scv = xdr.ScVal.fromXDR(xdrResult!, 'base64');
-    const vals = scv.vec()!;
+    if (result.result?.retval) {
+      const vals = scValToNative(result.result.retval) as any[];
+      return {
+        name: vals[0],
+        symbol: vals[1],
+        decimals: vals[2],
+        totalSupply: vals[3],
+      };
+    }
 
-    return {
-      name: vals[0].str()!.toString(),
-      symbol: vals[1].str()!.toString(),
-      decimals: vals[2].u32()!,
-      totalSupply: Number(vals[3].u128()!.toString()),
-    };
+    throw new ContractError('No token info returned');
   }
 
   async getSvltBalance(address: string): Promise<number> {
     const contract = new Contract(TOKEN_ID);
     const addr = new Address(address);
-    const method = contract.call('balance', addr.toScVal());
+    const scValAddr = nativeToScVal(addr, { type: 'address' });
 
-    const result = await this.server.simulateTransaction(
-      new TransactionBuilder(new Account('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWH', '0'), {
-        fee: 100,
-        networkPassphrase: Networks.TESTNET,
-      })
-        .addOperation(method)
-        .build()
-    );
+    const fakeAccount = new Account('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWH', '0');
+    const tx = new TransactionBuilder(fakeAccount, {
+      fee: BASE_FEE,
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(contract.call('balance', scValAddr))
+      .setTimeout(30)
+      .build();
 
-    if (result.status !== 'success') {
+    const result = await this.server.simulateTransaction(tx);
+
+    if ('error' in result) {
       throw new ContractError('Failed to get balance');
     }
 
-    const xdrResult = result.result?.toXDR('base64');
-    const scv = xdr.ScVal.fromXDR(xdrResult!, 'base64');
-    return Number(scv.u128()!.toString());
+    if (result.result?.retval) {
+      return Number(scValToNative(result.result.retval));
+    }
+
+    throw new ContractError('No balance returned');
   }
 
   async approveSvlt(ownerKey: string, spenderAddress: string, amount: number): Promise<string> {
@@ -141,16 +164,16 @@ class DexContractClient {
     const contract = new Contract(TOKEN_ID);
     const owner = new Address(ownerKey);
     const spender = new Address(spenderAddress);
-    const amountScv = ScVal.scvU128(BigInt(amount));
-
-    const method = contract.call('approve', owner.toScVal(), spender.toScVal(), amountScv);
+    const scValOwner = nativeToScVal(owner, { type: 'address' });
+    const scValSpender = nativeToScVal(spender, { type: 'address' });
+    const scValAmount = nativeToScVal(BigInt(amount), { type: 'u128' });
 
     const account = await this.server.getAccount(ownerKey);
     const tx = new TransactionBuilder(account, {
-      fee: 100,
+      fee: BASE_FEE,
       networkPassphrase: Networks.TESTNET,
     })
-      .addOperation(method)
+      .addOperation(contract.call('approve', scValOwner, scValSpender, scValAmount))
       .setTimeout(30)
       .build();
 
@@ -181,36 +204,37 @@ class DexContractClient {
     }
 
     const contract = new Contract(POOL_ID);
-    const method = contract.call('get_reserves', 'total_supply', 'fee_bps');
 
-    const result = await this.server.simulateTransaction(
-      new TransactionBuilder(new Account('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWH', '0'), {
-        fee: 100,
-        networkPassphrase: Networks.TESTNET,
-      })
-        .addOperation(method)
-        .build()
-    );
+    const fakeAccount = new Account('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWH', '0');
+    const tx = new TransactionBuilder(fakeAccount, {
+      fee: BASE_FEE,
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(contract.call('get_pool_info'))
+      .setTimeout(30)
+      .build();
 
-    if (result.status !== 'success') {
+    const result = await this.server.simulateTransaction(tx);
+
+    if ('error' in result) {
       throw new ContractError('Failed to get pool info');
     }
 
-    const xdrResult = result.result?.toXDR('base64');
-    const scv = xdr.ScVal.fromXDR(xdrResult!, 'base64');
-    const vals = scv.vec()!;
+    if (result.result?.retval) {
+      const poolInfo = scValToNative(result.result.retval) as any;
+      const data = {
+        xlmReserve: Number(poolInfo.xlmReserve || poolInfo.xlm_reserve || 0),
+        tokenReserve: Number(poolInfo.tokenReserve || poolInfo.token_reserve || 0),
+        totalLp: Number(poolInfo.totalLp || poolInfo.total_lp || 0),
+        feeBps: Number(poolInfo.feeBps || poolInfo.fee_bps || 0),
+        cached: false,
+      };
 
-    const reserves = vals[0].vec()!;
-    const data = {
-      xlmReserve: Number(reserves[0].u128()!.toString()),
-      tokenReserve: Number(reserves[1].u128()!.toString()),
-      totalLp: Number(vals[1].u128()!.toString()),
-      feeBps: vals[2].u32()!,
-      cached: false,
-    };
+      this.poolInfoCache = { data, timestamp: now };
+      return data;
+    }
 
-    this.poolInfoCache = { data, timestamp: now };
-    return data;
+    throw new ContractError('No pool info returned');
   }
 
   async getQuote(direction: 'xlm_to_token' | 'token_to_xlm', amountIn: number): Promise<{
@@ -248,17 +272,16 @@ class DexContractClient {
 
     const contract = new Contract(POOL_ID);
     const buyer = new Address(buyerKey);
-    const amountInScv = ScVal.scvU128(BigInt(xlmInStroops));
-    const minOutScv = ScVal.scvU128(BigInt(Math.floor(quote.amountOut * 0.95))); // 5% slippage tolerance
-
-    const method = contract.call('swap', buyer.toScVal(), amountInScv, minOutScv);
+    const scValBuyer = nativeToScVal(buyer, { type: 'address' });
+    const scValAmountIn = nativeToScVal(BigInt(xlmInStroops), { type: 'u128' });
+    const scValMinOut = nativeToScVal(BigInt(Math.floor(quote.amountOut * 0.95)), { type: 'u128' }); // 5% slippage
 
     const account = await this.server.getAccount(buyerKey);
     const tx = new TransactionBuilder(account, {
-      fee: 100,
+      fee: BASE_FEE,
       networkPassphrase: Networks.TESTNET,
     })
-      .addOperation(method)
+      .addOperation(contract.call('swap', scValBuyer, scValAmountIn, scValMinOut))
       .setTimeout(30)
       .build();
 
@@ -283,17 +306,16 @@ class DexContractClient {
 
     const contract = new Contract(POOL_ID);
     const seller = new Address(sellerKey);
-    const amountInScv = ScVal.scvU128(BigInt(tokenInStroops));
-    const minOutScv = ScVal.scvU128(BigInt(Math.floor(quote.amountOut * 0.95))); // 5% slippage tolerance
-
-    const method = contract.call('swap', seller.toScVal(), amountInScv, minOutScv);
+    const scValSeller = nativeToScVal(seller, { type: 'address' });
+    const scValAmountIn = nativeToScVal(BigInt(tokenInStroops), { type: 'u128' });
+    const scValMinOut = nativeToScVal(BigInt(Math.floor(quote.amountOut * 0.95)), { type: 'u128' }); // 5% slippage
 
     const account = await this.server.getAccount(sellerKey);
     const tx = new TransactionBuilder(account, {
-      fee: 100,
+      fee: BASE_FEE,
       networkPassphrase: Networks.TESTNET,
     })
-      .addOperation(method)
+      .addOperation(contract.call('swap', scValSeller, scValAmountIn, scValMinOut))
       .setTimeout(30)
       .build();
 
@@ -315,17 +337,16 @@ class DexContractClient {
 
     const contract = new Contract(POOL_ID);
     const provider = new Address(providerKey);
-    const xlmScv = ScVal.scvU128(BigInt(xlmAmount));
-    const tokenScv = ScVal.scvU128(BigInt(tokenAmount));
-
-    const method = contract.call('add_liquidity', provider.toScVal(), xlmScv, tokenScv);
+    const scValProvider = nativeToScVal(provider, { type: 'address' });
+    const scValXlm = nativeToScVal(BigInt(xlmAmount), { type: 'u128' });
+    const scValToken = nativeToScVal(BigInt(tokenAmount), { type: 'u128' });
 
     const account = await this.server.getAccount(providerKey);
     const tx = new TransactionBuilder(account, {
-      fee: 100,
+      fee: BASE_FEE,
       networkPassphrase: Networks.TESTNET,
     })
-      .addOperation(method)
+      .addOperation(contract.call('add_liquidity', scValProvider, scValXlm, scValToken))
       .setTimeout(30)
       .build();
 
@@ -344,16 +365,15 @@ class DexContractClient {
 
     const contract = new Contract(POOL_ID);
     const provider = new Address(providerKey);
-    const lpScv = ScVal.scvU128(BigInt(lpAmount));
-
-    const method = contract.call('remove_liquidity', provider.toScVal(), lpScv);
+    const scValProvider = nativeToScVal(provider, { type: 'address' });
+    const scValLp = nativeToScVal(BigInt(lpAmount), { type: 'u128' });
 
     const account = await this.server.getAccount(providerKey);
     const tx = new TransactionBuilder(account, {
-      fee: 100,
+      fee: BASE_FEE,
       networkPassphrase: Networks.TESTNET,
     })
-      .addOperation(method)
+      .addOperation(contract.call('remove_liquidity', scValProvider, scValLp))
       .setTimeout(30)
       .build();
 
@@ -370,103 +390,112 @@ class DexContractClient {
   async getLpBalance(address: string): Promise<number> {
     const contract = new Contract(POOL_ID);
     const addr = new Address(address);
-    const method = contract.call('balance', addr.toScVal());
+    const scValAddr = nativeToScVal(addr, { type: 'address' });
 
-    const result = await this.server.simulateTransaction(
-      new TransactionBuilder(new Account('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWH', '0'), {
-        fee: 100,
-        networkPassphrase: Networks.TESTNET,
-      })
-        .addOperation(method)
-        .build()
-    );
+    const fakeAccount = new Account('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWH', '0');
+    const tx = new TransactionBuilder(fakeAccount, {
+      fee: BASE_FEE,
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(contract.call('balance', scValAddr))
+      .setTimeout(30)
+      .build();
 
-    if (result.status !== 'success') {
+    const result = await this.server.simulateTransaction(tx);
+
+    if ('error' in result) {
       throw new ContractError('Failed to get LP balance');
     }
 
-    const xdrResult = result.result?.toXDR('base64');
-    const scv = xdr.ScVal.fromXDR(xdrResult!, 'base64');
-    return Number(scv.u128()!.toString());
+    if (result.result?.retval) {
+      return Number(scValToNative(result.result.retval));
+    }
+
+    throw new ContractError('No LP balance returned');
   }
 
   // ==================== REGISTRY METHODS ====================
 
   async getPools(): Promise<PoolInfo[]> {
     const contract = new Contract(REGISTRY_ID);
-    const method = contract.call('get_pools');
 
-    const result = await this.server.simulateTransaction(
-      new TransactionBuilder(new Account('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWH', '0'), {
-        fee: 100,
-        networkPassphrase: Networks.TESTNET,
-      })
-        .addOperation(method)
-        .build()
-    );
+    const fakeAccount = new Account('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWH', '0');
+    const tx = new TransactionBuilder(fakeAccount, {
+      fee: BASE_FEE,
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(contract.call('get_pools'))
+      .setTimeout(30)
+      .build();
 
-    if (result.status !== 'success') {
+    const result = await this.server.simulateTransaction(tx);
+
+    if ('error' in result) {
       throw new ContractError('Failed to get pools');
     }
 
-    const xdrResult = result.result?.toXDR('base64');
-    const scv = xdr.ScVal.fromXDR(xdrResult!, 'base64');
-    const poolVec = scv.vec()!;
+    if (result.result?.retval) {
+      const pools = scValToNative(result.result.retval) as any[];
+      return pools.map(pool => ({
+        poolId: pool.poolId || pool.pool_id || '',
+        tokenA: pool.tokenA || pool.token_a || '',
+        tokenB: pool.tokenB || pool.token_b || '',
+        tokenContract: pool.tokenContract || pool.token_contract || '',
+        createdAt: Number(pool.createdAt || pool.created_at || 0),
+      }));
+    }
 
-    return poolVec.map(pool => {
-      const fields = pool.obj()!;
-      return {
-        poolId: fields.get('pool_id')!.address()!.toString(),
-        tokenA: fields.get('token_a')!.str()!.toString(),
-        tokenB: fields.get('token_b')!.str()!.toString(),
-        tokenContract: fields.get('token_contract')!.address()!.toString(),
-        createdAt: Number(fields.get('created_at')!.u64()!.toString()),
-      };
-    });
+    throw new ContractError('No pools returned');
   }
 
   async getPoolCount(): Promise<number> {
     const contract = new Contract(REGISTRY_ID);
-    const method = contract.call('pool_count');
 
-    const result = await this.server.simulateTransaction(
-      new TransactionBuilder(new Account('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWH', '0'), {
-        fee: 100,
-        networkPassphrase: Networks.TESTNET,
-      })
-        .addOperation(method)
-        .build()
-    );
+    const fakeAccount = new Account('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWH', '0');
+    const tx = new TransactionBuilder(fakeAccount, {
+      fee: BASE_FEE,
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(contract.call('pool_count'))
+      .setTimeout(30)
+      .build();
 
-    if (result.status !== 'success') {
+    const result = await this.server.simulateTransaction(tx);
+
+    if ('error' in result) {
       throw new ContractError('Failed to get pool count');
     }
 
-    const xdrResult = result.result?.toXDR('base64');
-    const scv = xdr.ScVal.fromXDR(xdrResult!, 'base64');
-    return scv.u32()!;
+    if (result.result?.retval) {
+      return Number(scValToNative(result.result.retval));
+    }
+
+    throw new ContractError('No pool count returned');
   }
 
   async getTotalLiquidity(): Promise<number> {
     const contract = new Contract(REGISTRY_ID);
-    const method = contract.call('get_total_liquidity');
 
-    const result = await this.server.simulateTransaction(
-      new TransactionBuilder(new Account('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWH', '0'), {
-        fee: 100,
-        networkPassphrase: Networks.TESTNET,
-      })
-        .addOperation(method)
-        .build()
-    );
+    const fakeAccount = new Account('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWH', '0');
+    const tx = new TransactionBuilder(fakeAccount, {
+      fee: BASE_FEE,
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(contract.call('get_total_liquidity'))
+      .setTimeout(30)
+      .build();
 
-    if (result.status !== 'success') {
+    const result = await this.server.simulateTransaction(tx);
+
+    if ('error' in result) {
       throw new ContractError('Failed to get total liquidity');
     }
 
-    const xdrResult = result.result?.toXDR('base64');
-    const scv = xdr.ScVal.fromXDR(xdrResult!, 'base64');
-    return Number(scv.u128()!.toString());
+    if (result.result?.retval) {
+      return Number(scValToNative(result.result.retval));
+    }
+
+    throw new ContractError('No total liquidity returned');
   }
 }
 

@@ -7,6 +7,8 @@ import { Navbar } from '../../components/Navbar';
 import { PoolPanel } from '../../components/PoolPanel';
 import { Alert, Card } from '../../components/ui';
 
+export const dynamic = 'force-dynamic';
+
 export default function PoolPage() {
   const [publicKey, setPublicKey] = useState('');
   const [isConnected, setIsConnected] = useState(false);
@@ -21,9 +23,9 @@ export default function PoolPage() {
       setIsConnected(true);
     } catch (err) {
       if (err instanceof WalletNotFoundError) {
-        setError({ type: 'warning', message: err.message });
+        setError({ type: 'warning', message: 'No Stellar wallet found. Install Freighter or another wallet.' });
       } else if (err instanceof WalletRejectedError) {
-        setError({ type: 'info', message: err.message });
+        setError({ type: 'info', message: 'You cancelled the signing. Click to try again.' });
       } else {
         setError({ type: 'warning', message: 'Failed to connect wallet' });
       }
@@ -70,6 +72,11 @@ export default function PoolPage() {
                     onDismiss={() => setError(null)}
                   >
                     {error.message}
+                    {error.type === 'warning' && error.message.includes('Freighter') && (
+                      <p className="mt-2 text-xs">
+                        Get Freighter at <a href="https://freighter.app" target="_blank" rel="noopener noreferrer" className="underline">freighter.app</a>
+                      </p>
+                    )}
                   </Alert>
                 </div>
               )}

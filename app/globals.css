@@ -27,46 +27,112 @@ body {
   background: #B4B1AB;
 }
 
-@layer utilities {
-  .claude-card {
-    @apply bg-surface border border-borderInner rounded-xl shadow-sm transition-all duration-200;
-  }
+.claude-card {
+  background-color: #FAF9F7;
+  border: 1px solid #E8E5E0;
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  transition: all 200ms;
+}
 
-  .claude-card:hover {
-    @apply border-borderOuter shadow-md;
-  }
+.claude-card:hover {
+  border-color: #D4D0CA;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
 
-  .claude-button {
-    @apply inline-flex items-center justify-center font-medium transition-all duration-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed;
-  }
+.claude-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 500;
+  transition: all 200ms;
+  border-radius: 0.5rem;
+}
 
-  .claude-button-primary {
-    @apply bg-primary text-white hover:bg-textMain border border-transparent shadow-sm;
-  }
+.claude-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
-  .claude-button-secondary {
-    @apply bg-surface text-textMain border border-borderOuter hover:bg-[#F0EEEB] shadow-sm;
-  }
+.claude-button-primary {
+  background-color: #C96442;
+  color: white;
+  border: 1px solid transparent;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
 
-  .claude-input {
-    @apply w-full bg-surface border border-borderInner rounded-lg px-4 py-2 text-textMain placeholder-textMuted/60 transition-all duration-200 focus:outline-none focus:border-borderOuter focus:shadow-[0_0_0_2px_rgba(201,100,66,0.1)];
-  }
+.claude-button-primary:hover {
+  background-color: #24211D;
+}
 
-  .animate-slide-up {
-    animation: slide-up 0.4s ease-out forwards;
-  }
+.claude-button-secondary {
+  background-color: #FAF9F7;
+  color: #24211D;
+  border: 1px solid #D4D0CA;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
 
-  .stagger-1 { animation-delay: 0.1s; opacity: 0; }
-  .stagger-2 { animation-delay: 0.2s; opacity: 0; }
-  .stagger-3 { animation-delay: 0.3s; opacity: 0; }
-  .stagger-4 { animation-delay: 0.4s; opacity: 0; }
-  .stagger-5 { animation-delay: 0.5s; opacity: 0; }
+.claude-button-secondary:hover {
+  background-color: #F0EEEB;
+}
 
-  .price-flash {
-    animation: price-flash 0.6s ease-out;
-  }
+.claude-input {
+  width: 100%;
+  background-color: #FAF9F7;
+  border: 1px solid #E8E5E0;
+  border-radius: 0.5rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  color: #24211D;
+  transition: all 200ms;
+}
 
-  .mobile-safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom, 16px);
+.claude-input::placeholder {
+  color: rgba(122, 117, 112, 0.6);
+}
+
+.claude-input:focus {
+  outline: none;
+  border-color: #D4D0CA;
+  box-shadow: 0 0 0 2px rgba(201, 100, 66, 0.1);
+}
+
+.animate-slide-up {
+  animation: slide-up 0.4s ease-out forwards;
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
   }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.stagger-1 { animation-delay: 0.1s; opacity: 0; }
+.stagger-2 { animation-delay: 0.2s; opacity: 0; }
+.stagger-3 { animation-delay: 0.3s; opacity: 0; }
+.stagger-4 { animation-delay: 0.4s; opacity: 0; }
+.stagger-5 { animation-delay: 0.5s; opacity: 0; }
+
+.price-flash {
+  animation: price-flash 0.6s ease-out;
+}
+
+@keyframes price-flash {
+  0% {
+    background-color: rgba(201, 100, 66, 0.15);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.mobile-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
 }

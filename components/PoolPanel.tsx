@@ -131,13 +131,13 @@ export const PoolPanel: React.FC<PoolPanelProps> = ({ publicKey, onSuccess }) =>
       }, 3000);
     } catch (err: unknown) {
       if (err instanceof SlippageExceededError) {
-        setError('Price impact too high. Reduce amounts.');
+        setError('Price impact too high (>5%). Try a smaller swap amount.');
       } else if (err instanceof WalletRejectedError) {
-        setError('Signing cancelled. Try again.');
+        setError('You cancelled the signing. Click to try again.');
       } else if (err instanceof InsufficientBalanceError) {
-        setError('Insufficient balance. Check your balances.');
+        setError('Insufficient XLM balance. You need at least 1.5 XLM for network fees.');
       } else if (err instanceof ContractError) {
-        setError(err.message);
+        setError(`${err.message}. Check https://stellar.expert for transaction details`);
       } else {
         setError('Failed to add liquidity. Please try again.');
       }
@@ -171,11 +171,11 @@ export const PoolPanel: React.FC<PoolPanelProps> = ({ publicKey, onSuccess }) =>
       }, 3000);
     } catch (err: unknown) {
       if (err instanceof WalletRejectedError) {
-        setError('Signing cancelled. Try again.');
+        setError('You cancelled the signing. Click to try again.');
       } else if (err instanceof InsufficientBalanceError) {
-        setError('Insufficient LP balance.');
+        setError('Insufficient XLM balance. You need at least 1.5 XLM for network fees.');
       } else if (err instanceof ContractError) {
-        setError(err.message);
+        setError(`${err.message}. Check https://stellar.expert for transaction details`);
       } else {
         setError('Failed to remove liquidity. Please try again.');
       }
@@ -393,6 +393,11 @@ export const PoolPanel: React.FC<PoolPanelProps> = ({ publicKey, onSuccess }) =>
       {error && (
         <Alert variant="error" dismissible onDismiss={() => setError(null)}>
           {error}
+          {error.includes('XLM balance') && (
+            <p className="mt-2 text-xs">
+              Fund your testnet account at <a href="https://friendbot.stellar.org" target="_blank" rel="noopener noreferrer" className="underline">friendbot.stellar.org</a>
+            </p>
+          )}
         </Alert>
       )}
     </Card>

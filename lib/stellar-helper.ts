@@ -388,4 +388,35 @@ export class StellarHelper {
   }
 }
 
-export const stellar = new StellarHelper("testnet");
+let stellarInstance: StellarHelper | undefined;
+
+function getStellarHelper(): StellarHelper {
+  if (typeof window === 'undefined') {
+    // Server-side: create a dummy instance
+    return {
+      horizon: new Horizon.Server("https://horizon-testnet.stellar.org"),
+      rpcServer: new rpc.Server("https://soroban-testnet.stellar.org"),
+      networkPassphrase: Networks.TESTNET,
+      connectWallet: async () => { throw new Error('Cannot call connectWallet on server'); },
+      disconnect: () => {},
+      getBalance: async () => ({ xlm: '0', cached: false }),
+      getRecentTransactions: async () => ({ transactions: [], cached: false }),
+      getPoolInfo: async () => null,
+      getExplorerLink: () => '',
+      formatAddress: () => '',
+      formatXLM: () => '',
+    } as any;
+  }
+  
+  if (!stellarInstance) {
+    stellarInstance = new StellarHelper("testnet");
+  }
+  return stellarInstance;
+}
+
+export const stellar = new Proxy({} as StellarHelper, {
+  get: (target, prop) => {
+    const instance = getStellarHelper();
+    return (instance as any)[prop];
+  },
+});
