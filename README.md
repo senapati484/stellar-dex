@@ -154,7 +154,7 @@ Node.js 18+, Rust + Cargo, Stellar CLI, Freighter wallet
 
 ### Run Locally
 ```bash
-git clone [your-repo-url]
+git clone https://github.com/senapati484/stellar-dex.git
 cd stellar-dex
 npm install
 cp .env.local.example .env.local

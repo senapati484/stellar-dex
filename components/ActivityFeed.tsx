@@ -132,21 +132,21 @@ const parseTransactionToEvent = (tx: any, contractId: string): DexEvent | null =
       const poolTxns = await stellar.horizon
         .transactions()
         .forAccount(POOL_ID)
-        .limit(20)
+        .limit(10)
         .order('desc')
         .call();
 
       const registryTxns = await stellar.horizon
         .transactions()
         .forAccount(REGISTRY_ID)
-        .limit(10)
+        .limit(5)
         .order('desc')
         .call();
 
       const tokenTxns = await stellar.horizon
         .transactions()
         .forAccount(TOKEN_ID)
-        .limit(10)
+        .limit(5)
         .order('desc')
         .call();
 
@@ -216,7 +216,7 @@ const parseTransactionToEvent = (tx: any, contractId: string): DexEvent | null =
       }
 
       const isVisible = document.visibilityState === 'visible';
-      const interval = isVisible ? 15000 : 30000;
+      const interval = isVisible ? 45000 : 60000; // Increased: 45s visible, 60s hidden
 
       pollingIntervalRef.current = setInterval(() => {
         pollEventsRef.current();
@@ -224,13 +224,7 @@ const parseTransactionToEvent = (tx: any, contractId: string): DexEvent | null =
 
       setTimeUntilNextPoll(interval / 1000);
 
-      if (countdownIntervalRef.current) {
-        clearInterval(countdownIntervalRef.current);
-      }
-
-      countdownIntervalRef.current = setInterval(() => {
-        setTimeUntilNextPoll(prev => Math.max(0, prev - 1));
-      }, 1000);
+      // Remove countdown timer entirely - was causing unnecessary renders
     };
 
     startPolling();
@@ -363,7 +357,7 @@ const parseTransactionToEvent = (tx: any, contractId: string): DexEvent | null =
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${polling ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
             <span className="text-xs text-textMuted">
-              Live · Polling {timeUntilNextPoll}s
+              {polling ? 'Live' : 'Paused'}
             </span>
           </div>
           <Button
