@@ -414,9 +414,13 @@ function getStellarHelper(): StellarHelper {
   return stellarInstance;
 }
 
+let cachedInstance: StellarHelper | undefined;
+
 export const stellar = new Proxy({} as StellarHelper, {
   get: (target, prop) => {
-    const instance = getStellarHelper();
-    return (instance as any)[prop];
+    if (!cachedInstance) {
+      cachedInstance = getStellarHelper();
+    }
+    return (cachedInstance as any)[prop];
   },
 });

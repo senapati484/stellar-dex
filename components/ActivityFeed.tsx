@@ -37,88 +37,95 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ refreshTrigger }) =>
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const parseTransactionToEvent = useCallback((tx: any, contractId: string): DexEvent | null => {
-    try {
-      const operations = tx.operations || [];
-      if (operations.length === 0) return null;
+  // We keep a ref to events to avoid dependency cycles in pollEvents
+  const eventsRef = useRef(events);
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
 
-      const op = operations[0];
-      const type = op.type;
-      const address = tx.source_account;
-      const txHash = tx.hash;
-      const timestamp = new Date(tx.created_at).getTime();
+// Extracted to avoid recreation on every render
+const parseTransactionToEvent = (tx: any, contractId: string): DexEvent | null => {
+  try {
+    const operations = tx.operations || [];
+    if (operations.length === 0) return null;
 
-      let eventType: DexEvent['type'] | null = null;
-      let amountA: number | undefined;
-      let amountB: number | undefined;
+    const op = operations[0];
+    const type = op.type;
+    const address = tx.source_account;
+    const txHash = tx.hash;
+    const timestamp = new Date(tx.created_at).getTime();
 
-      // Parse operation type and amounts based on contract
-      if (contractId === POOL_ID) {
-        if (type === 'invoke_host_function') {
-          // Check function name in body
-          const body = op.body?.invoke_host_function?.function;
-          if (body === 'swap') {
-            eventType = 'swap';
-            // Parse amounts from operation parameters (simplified)
-            const params = op.body?.invoke_host_function?.parameters || [];
-            if (params.length >= 2) {
-              amountA = params[0]?.value?.u128 ? Number(params[0].value.u128) : undefined;
-              amountB = params[1]?.value?.u128 ? Number(params[1].value.u128) : undefined;
-            }
-          } else if (body === 'add_liquidity') {
-            eventType = 'add_liquidity';
-            const params = op.body?.invoke_host_function?.parameters || [];
-            if (params.length >= 2) {
-              amountA = params[0]?.value?.u128 ? Number(params[0].value.u128) : undefined;
-              amountB = params[1]?.value?.u128 ? Number(params[1].value.u128) : undefined;
-            }
-          } else if (body === 'remove_liquidity') {
-            eventType = 'remove_liquidity';
-            const params = op.body?.invoke_host_function?.parameters || [];
-            if (params.length >= 1) {
-              amountA = params[0]?.value?.u128 ? Number(params[0].value.u128) : undefined;
-            }
+    let eventType: DexEvent['type'] | null = null;
+    let amountA: number | undefined;
+    let amountB: number | undefined;
+
+    // Parse operation type and amounts based on contract
+    if (contractId === POOL_ID) {
+      if (type === 'invoke_host_function') {
+        // Check function name in body
+        const body = op.body?.invoke_host_function?.function;
+        if (body === 'swap') {
+          eventType = 'swap';
+          // Parse amounts from operation parameters (simplified)
+          const params = op.body?.invoke_host_function?.parameters || [];
+          if (params.length >= 2) {
+            amountA = params[0]?.value?.u128 ? Number(params[0].value.u128) : undefined;
+            amountB = params[1]?.value?.u128 ? Number(params[1].value.u128) : undefined;
+          }
+        } else if (body === 'add_liquidity') {
+          eventType = 'add_liquidity';
+          const params = op.body?.invoke_host_function?.parameters || [];
+          if (params.length >= 2) {
+            amountA = params[0]?.value?.u128 ? Number(params[0].value.u128) : undefined;
+            amountB = params[1]?.value?.u128 ? Number(params[1].value.u128) : undefined;
+          }
+        } else if (body === 'remove_liquidity') {
+          eventType = 'remove_liquidity';
+          const params = op.body?.invoke_host_function?.parameters || [];
+          if (params.length >= 1) {
+            amountA = params[0]?.value?.u128 ? Number(params[0].value.u128) : undefined;
           }
         }
-      } else if (contractId === TOKEN_ID) {
-        if (type === 'invoke_host_function') {
-          const body = op.body?.invoke_host_function?.function;
-          if (body === 'transfer') {
-            eventType = 'transfer';
-            const params = op.body?.invoke_host_function?.parameters || [];
-            if (params.length >= 1) {
-              amountA = params[0]?.value?.u128 ? Number(params[0].value.u128) : undefined;
-            }
-          } else if (body === 'mint') {
-            eventType = 'mint';
-            const params = op.body?.invoke_host_function?.parameters || [];
-            if (params.length >= 1) {
-              amountA = params[0]?.value?.u128 ? Number(params[0].value.u128) : undefined;
-            }
-          }
-        }
-      } else if (contractId === REGISTRY_ID) {
-        // Registry events - mostly metadata updates
-        eventType = 'transfer'; // Fallback for registry events
       }
-
-      if (!eventType) return null;
-
-      return {
-        id: txHash,
-        type: eventType,
-        address,
-        amountA,
-        amountB,
-        txHash,
-        timestamp,
-        contractId,
-      };
-    } catch (err) {
-      console.error('Failed to parse transaction:', err);
-      return null;
+    } else if (contractId === TOKEN_ID) {
+      if (type === 'invoke_host_function') {
+        const body = op.body?.invoke_host_function?.function;
+        if (body === 'transfer') {
+          eventType = 'transfer';
+          const params = op.body?.invoke_host_function?.parameters || [];
+          if (params.length >= 1) {
+            amountA = params[0]?.value?.u128 ? Number(params[0].value.u128) : undefined;
+          }
+        } else if (body === 'mint') {
+          eventType = 'mint';
+          const params = op.body?.invoke_host_function?.parameters || [];
+          if (params.length >= 1) {
+            amountA = params[0]?.value?.u128 ? Number(params[0].value.u128) : undefined;
+          }
+        }
+      }
+    } else if (contractId === REGISTRY_ID) {
+      // Registry events - mostly metadata updates
+      eventType = 'transfer'; // Fallback for registry events
     }
-  }, []);
+
+    if (!eventType) return null;
+
+    return {
+      id: txHash,
+      type: eventType,
+      address,
+      amountA,
+      amountB,
+      txHash,
+      timestamp,
+      contractId,
+    };
+  } catch (err) {
+    console.error('Failed to parse transaction:', err);
+    return null;
+  }
+};
 
   const pollEvents = useCallback(async () => {
     try {
@@ -163,8 +170,8 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ refreshTrigger }) =>
       const sortedEvents = deduplicatedEvents.sort((a, b) => b.timestamp - a.timestamp);
 
       // Mark new events
-      setEvents(prevEvents => {
-        const existingIds = new Set(prevEvents.map(e => e.txHash));
+      setEvents(() => {
+        const existingIds = new Set(eventsRef.current.map(e => e.txHash));
         const newIds = new Set(
           sortedEvents
             .filter(e => !existingIds.has(e.txHash))
@@ -186,21 +193,33 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ refreshTrigger }) =>
     } catch (err) {
       console.error('Failed to poll events:', err);
     }
-  }, [parseTransactionToEvent]);
+  }, []);
 
-  // Adaptive polling based on visibility
+  const pollEventsRef = useRef(pollEvents);
   useEffect(() => {
+    pollEventsRef.current = pollEvents;
+  }, [pollEvents]);
+
+  // Adaptive polling based on visibility & single initial load
+  useEffect(() => {
+    // Initial Load
+    const initialLoad = async () => {
+      setLoading(true);
+      await pollEventsRef.current();
+      setLoading(false);
+    };
+    initialLoad();
+
     const startPolling = () => {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
       }
 
       const isVisible = document.visibilityState === 'visible';
-      // Increased from 3s to 15s visible, 12s to 30s hidden to reduce API calls
       const interval = isVisible ? 15000 : 30000;
 
       pollingIntervalRef.current = setInterval(() => {
-        pollEvents();
+        pollEventsRef.current();
       }, interval);
 
       setTimeUntilNextPoll(interval / 1000);
@@ -209,7 +228,6 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ refreshTrigger }) =>
         clearInterval(countdownIntervalRef.current);
       }
 
-      // Only update countdown UI every second
       countdownIntervalRef.current = setInterval(() => {
         setTimeUntilNextPoll(prev => Math.max(0, prev - 1));
       }, 1000);
@@ -228,17 +246,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ refreshTrigger }) =>
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [pollEvents]);
-
-  // Initial load
-  useEffect(() => {
-    const initialLoad = async () => {
-      setLoading(true);
-      await pollEvents();
-      setLoading(false);
-    };
-    initialLoad();
-  }, [pollEvents]);
+  }, []);
 
   // Manual refresh
   const handleRefresh = useCallback(() => {

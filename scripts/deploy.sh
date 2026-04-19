@@ -19,29 +19,21 @@ fi
 
 echo "✓ stellar CLI and cargo found"
 
-# Generate/reuse deployer key
-stellar keys generate --global deployer --network testnet 2>/dev/null || true
+# Generate/reuse deployer key (--fund auto-funds via Friendbot, --overwrite avoids interactive prompt)
+stellar keys generate --fund --network testnet deployer 2>/dev/null || stellar keys fund --network testnet deployer
 DEPLOYER=$(stellar keys address deployer)
-echo "Deployer: $DEPLOYER"
-echo "→ Funding via Friendbot..."
-FRIENDBOT=$(curl -sf "https://friendbot.stellar.org?addr=$DEPLOYER" 2>/dev/null)
-if [ $? -ne 0 ]; then
-  echo "⚠  Friendbot faucet may be rate-limited or down. Ensure the address has test XLM."
-else
-  echo "✓ Funded via Friendbot"
+if [ -z "$DEPLOYER" ]; then
+  echo "❌ Failed to generate/retrieve deployer key"
+  exit 1
 fi
+echo "Deployer: $DEPLOYER"
 
 # ─────────────────────────────────────────
-# BUILD ALL THREE
+# BUILD ALL THREE (using stellar contract build → wasm32v1-none target)
 # ─────────────────────────────────────────
 echo ""
-echo "→ Building contracts for wasm32-unknown-unknown..."
-cargo build --target wasm32-unknown-unknown --release \
-  --manifest-path contracts/stellar_token/Cargo.toml
-cargo build --target wasm32-unknown-unknown --release \
-  --manifest-path contracts/liquidity_pool/Cargo.toml
-cargo build --target wasm32-unknown-unknown --release \
-  --manifest-path contracts/pool_registry/Cargo.toml
+echo "→ Building contracts (wasm32v1-none)..."
+stellar contract build --manifest-path Cargo.toml
 echo "✓ All contracts built"
 
 # ─────────────────────────────────────────
@@ -50,7 +42,7 @@ echo "✓ All contracts built"
 echo ""
 echo "→ Deploying stellar_token..."
 TOKEN_ID=$(stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/stellar_token.wasm \
+  --wasm target/wasm32v1-none/release/stellar_token.wasm \
   --source deployer --network testnet)
 echo "✓ Token: $TOKEN_ID"
 
@@ -69,7 +61,7 @@ echo "✓ Token initialized"
 echo ""
 echo "→ Deploying liquidity_pool..."
 POOL_ID=$(stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/liquidity_pool.wasm \
+  --wasm target/wasm32v1-none/release/liquidity_pool.wasm \
   --source deployer --network testnet)
 echo "✓ Pool: $POOL_ID"
 
@@ -87,7 +79,7 @@ echo "✓ Pool initialized (inter-contract link set)"
 echo ""
 echo "→ Deploying pool_registry..."
 REGISTRY_ID=$(stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/pool_registry.wasm \
+  --wasm target/wasm32v1-none/release/pool_registry.wasm \
   --source deployer --network testnet)
 echo "✓ Registry: $REGISTRY_ID"
 

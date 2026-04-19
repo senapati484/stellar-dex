@@ -43,7 +43,19 @@ export const PoolPanel: React.FC<PoolPanelProps> = ({ publicKey, onSuccess }) =>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const dexClient = useMemo(() => createDexClient((p) => setProgress(p)), []);
+  const isMounted = React.useRef(true);
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
+
+  const progressCallback = useCallback((p: TxProgress) => {
+    if (isMounted.current) {
+      setProgress(p);
+    }
+  }, []);
+
+  const dexClient = useMemo(() => createDexClient(progressCallback), [progressCallback]);
 
   // Load pool info and LP balance on mount
   useEffect(() => {
@@ -65,26 +77,44 @@ export const PoolPanel: React.FC<PoolPanelProps> = ({ publicKey, onSuccess }) =>
     loadData();
   }, [publicKey, dexClient]);
 
+  const isUpdatingRef = React.useRef(false);
+
   // Auto-calculate paired amount when user types
   useEffect(() => {
-    if (!poolInfo) return;
+    if (!poolInfo || isUpdatingRef.current) return;
 
     if (activeTab === 'add') {
       if (xlmAmount) {
+        isUpdatingRef.current = true;
         const xlmNum = parseFloat(xlmAmount);
         const tokenNum = xlmNum * (poolInfo.tokenReserve / poolInfo.xlmReserve);
         setTokenAmount(tokenNum > 0 ? tokenNum.toFixed(6) : '');
+        setTimeout(() => { isUpdatingRef.current = false; }, 0);
       } else {
+        isUpdatingRef.current = true;
         setTokenAmount('');
+        setTimeout(() => { isUpdatingRef.current = false; }, 0);
       }
+    }
+  }, [xlmAmount, poolInfo, activeTab]);
 
+  useEffect(() => {
+    if (!poolInfo || isUpdatingRef.current) return;
+
+    if (activeTab === 'add') {
       if (tokenAmount) {
+        isUpdatingRef.current = true;
         const tokenNum = parseFloat(tokenAmount);
         const xlmNum = tokenNum * (poolInfo.xlmReserve / poolInfo.tokenReserve);
         setXlmAmount(xlmNum > 0 ? xlmNum.toFixed(6) : '');
+        setTimeout(() => { isUpdatingRef.current = false; }, 0);
+      } else if (!xlmAmount) { // only clear if xlm is also cleared to avoid cycle
+        isUpdatingRef.current = true;
+        setXlmAmount('');
+        setTimeout(() => { isUpdatingRef.current = false; }, 0);
       }
     }
-  }, [xlmAmount, tokenAmount, poolInfo, activeTab]);
+  }, [tokenAmount, poolInfo, activeTab]);
 
   const handleXlmMax = useCallback(() => {
     if (poolInfo) {

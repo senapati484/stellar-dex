@@ -46,7 +46,19 @@ export const SwapPanel: React.FC<SwapPanelProps> = ({ publicKey, onSwapSuccess }
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const dexClient = useMemo(() => createDexClient((p) => setProgress(p)), []);
+  const isMounted = React.useRef(true);
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
+
+  const progressCallback = useCallback((p: TxProgress) => {
+    if (isMounted.current) {
+      setProgress(p);
+    }
+  }, []);
+
+  const dexClient = useMemo(() => createDexClient(progressCallback), [progressCallback]);
 
   // Load balances and pool info on mount
   useEffect(() => {
