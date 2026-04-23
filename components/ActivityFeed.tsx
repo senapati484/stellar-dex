@@ -37,6 +37,12 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ refreshTrigger }) =>
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  const isMounted = useRef(true);
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
+
   // We keep a ref to events to avoid dependency cycles in pollEvents
   const eventsRef = useRef(events);
   useEffect(() => {
@@ -169,6 +175,8 @@ const parseTransactionToEvent = (tx: any, contractId: string): DexEvent | null =
       const deduplicatedEvents = Array.from(eventMap.values());
       const sortedEvents = deduplicatedEvents.sort((a, b) => b.timestamp - a.timestamp);
 
+      if (!isMounted.current) return;
+
       // Mark new events
       setEvents(() => {
         const existingIds = new Set(eventsRef.current.map(e => e.txHash));
@@ -182,7 +190,7 @@ const parseTransactionToEvent = (tx: any, contractId: string): DexEvent | null =
         
         // Clear new event IDs after 2s
         setTimeout(() => {
-          setNewEventIds(new Set());
+          if (isMounted.current) setNewEventIds(new Set());
         }, 2000);
 
         return sortedEvents;
@@ -191,7 +199,7 @@ const parseTransactionToEvent = (tx: any, contractId: string): DexEvent | null =
       setLastPoll(new Date());
       setPollCount(prev => prev + 1);
     } catch (err) {
-      console.error('Failed to poll events:', err);
+      if (isMounted.current) console.error('Failed to poll events:', err);
     }
   }, []);
 
@@ -206,7 +214,7 @@ const parseTransactionToEvent = (tx: any, contractId: string): DexEvent | null =
     const initialLoad = async () => {
       setLoading(true);
       await pollEventsRef.current();
-      setLoading(false);
+      if (isMounted.current) setLoading(false);
     };
     initialLoad();
 
@@ -240,7 +248,7 @@ const parseTransactionToEvent = (tx: any, contractId: string): DexEvent | null =
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, [refreshTrigger]);
 
   // Manual refresh
   const handleRefresh = useCallback(() => {

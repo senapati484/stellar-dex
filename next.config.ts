@@ -10,7 +10,7 @@ const nextConfig: NextConfig = {
   // Experimental optimizations for development
   experimental: {
     // Optimize dev server performance
-    optimizePackageImports: ['react-icons', '@stellar/stellar-sdk'],
+    optimizePackageImports: ['react-icons'],
   },
 };
 

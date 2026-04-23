@@ -50,10 +50,17 @@ interface CacheEntry<T> {
 
 class TTLCache<T> {
   private store = new Map<string, CacheEntry<T>>();
+  private maxEntries: number;
 
-  constructor(private defaultTtlMs: number) {}
+  constructor(private defaultTtlMs: number, maxEntries = 100) {
+    this.maxEntries = maxEntries;
+  }
 
   set(key: string, value: T, ttlMs?: number): void {
+    if (this.store.size >= this.maxEntries) {
+      const firstKey = this.store.keys().next().value;
+      if (firstKey !== undefined) this.store.delete(firstKey);
+    }
     this.store.set(key, { value, expiresAt: Date.now() + (ttlMs ?? this.defaultTtlMs) });
   }
 
@@ -107,6 +114,8 @@ type PoolResult = {
    StellarHelper CLASS
    ═══════════════════════════════════════════════ */
 
+let walletKitInitialized = false;
+
 export class StellarHelper {
   public readonly horizon: Horizon.Server;
   public readonly rpcServer: rpc.Server;
@@ -127,11 +136,14 @@ export class StellarHelper {
       isTestnet ? "https://soroban-testnet.stellar.org" : "https://soroban-mainnet.stellar.org"
     );
 
-    StellarWalletsKit.init({
-      network: this.networkPassphrase,
-      selectedWalletId: "freighter",
-      modules: [],
-    });
+    if (typeof window !== "undefined" && !walletKitInitialized) {
+      StellarWalletsKit.init({
+        network: this.networkPassphrase,
+        selectedWalletId: "freighter",
+        modules: [],
+      });
+      walletKitInitialized = true;
+    }
   }
 
   /* ─── Wallet ─── */

@@ -77,56 +77,47 @@ export const PoolPanel: React.FC<PoolPanelProps> = ({ publicKey, onSuccess }) =>
     loadData();
   }, [publicKey, dexClient]);
 
-  const isUpdatingRef = React.useRef(false);
+  const handleXlmChange = useCallback((val: string) => {
+    setXlmAmount(val);
+    if (!poolInfo || activeTab !== 'add') return;
 
-  // Auto-calculate paired amount when user types
-  useEffect(() => {
-    if (!poolInfo || isUpdatingRef.current) return;
-
-    if (activeTab === 'add') {
-      if (xlmAmount) {
-        isUpdatingRef.current = true;
-        const xlmNum = parseFloat(xlmAmount);
+    if (val) {
+      const xlmNum = parseFloat(val);
+      if (!isNaN(xlmNum) && poolInfo.xlmReserve > 0) {
         const tokenNum = xlmNum * (poolInfo.tokenReserve / poolInfo.xlmReserve);
         setTokenAmount(tokenNum > 0 ? tokenNum.toFixed(6) : '');
-        setTimeout(() => { isUpdatingRef.current = false; }, 0);
-      } else {
-        isUpdatingRef.current = true;
-        setTokenAmount('');
-        setTimeout(() => { isUpdatingRef.current = false; }, 0);
       }
+    } else {
+      setTokenAmount('');
     }
-  }, [xlmAmount, poolInfo, activeTab]);
+  }, [poolInfo, activeTab]);
 
-  useEffect(() => {
-    if (!poolInfo || isUpdatingRef.current) return;
+  const handleTokenChange = useCallback((val: string) => {
+    setTokenAmount(val);
+    if (!poolInfo || activeTab !== 'add') return;
 
-    if (activeTab === 'add') {
-      if (tokenAmount) {
-        isUpdatingRef.current = true;
-        const tokenNum = parseFloat(tokenAmount);
+    if (val) {
+      const tokenNum = parseFloat(val);
+      if (!isNaN(tokenNum) && poolInfo.tokenReserve > 0) {
         const xlmNum = tokenNum * (poolInfo.xlmReserve / poolInfo.tokenReserve);
         setXlmAmount(xlmNum > 0 ? xlmNum.toFixed(6) : '');
-        setTimeout(() => { isUpdatingRef.current = false; }, 0);
-      } else if (!xlmAmount) { // only clear if xlm is also cleared to avoid cycle
-        isUpdatingRef.current = true;
-        setXlmAmount('');
-        setTimeout(() => { isUpdatingRef.current = false; }, 0);
       }
+    } else {
+      setXlmAmount('');
     }
-  }, [tokenAmount, poolInfo, activeTab]);
+  }, [poolInfo, activeTab]);
 
   const handleXlmMax = useCallback(() => {
     if (poolInfo) {
-      setXlmAmount(poolInfo.xlmReserve.toFixed(6));
+      handleXlmChange(poolInfo.xlmReserve.toFixed(6));
     }
-  }, [poolInfo]);
+  }, [poolInfo, handleXlmChange]);
 
   const handleTokenMax = useCallback(() => {
     if (poolInfo) {
-      setTokenAmount(poolInfo.tokenReserve.toFixed(6));
+      handleTokenChange(poolInfo.tokenReserve.toFixed(6));
     }
-  }, [poolInfo]);
+  }, [poolInfo, handleTokenChange]);
 
   const handleLpMax = useCallback(() => {
     const maxLp = myLpBalance / 10_000_000;
@@ -312,7 +303,7 @@ export const PoolPanel: React.FC<PoolPanelProps> = ({ publicKey, onSuccess }) =>
           <TokenAmountInput
             label="XLM Amount"
             value={xlmAmount}
-            onChange={setXlmAmount}
+            onChange={handleXlmChange}
             symbol="XLM"
             maxAmount={poolInfo ? poolInfo.xlmReserve / 10_000_000 : 0}
             onMax={handleXlmMax}
@@ -322,7 +313,7 @@ export const PoolPanel: React.FC<PoolPanelProps> = ({ publicKey, onSuccess }) =>
           <TokenAmountInput
             label="SVLT Amount"
             value={tokenAmount}
-            onChange={setTokenAmount}
+            onChange={handleTokenChange}
             symbol="SVLT"
             maxAmount={poolInfo ? poolInfo.tokenReserve / 10_000_000 : 0}
             onMax={handleTokenMax}
